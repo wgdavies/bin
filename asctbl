@@ -35,6 +35,7 @@
 #
 PATH=/bin:/usr/bin
 typeset -r PROGNAME="asctbl"
+typeset -r VERSION="1.2.0"
 integer OFF=0
 integer ON=1
 integer ERR=-1
@@ -63,6 +64,7 @@ compound FLAG=(
     integer nooct=${OFF}
     integer nohex=${OFF}
     integer col=${OFF}
+    integer vers=${OFF}
 )
 
 ## Print debug statements for when you are way over-obsessing about a stupid
@@ -269,12 +271,12 @@ function printTable {
 ## getopts() parameters; there's a lot of extra stuff here used for online docs
 #
 typeset argc USAGE_PARAMS
-USAGE_PARAMS=$'[-?\n@(#)$Id: asctbl (Print ASCII Table) version: 1.1.0 $\n]'
+USAGE_PARAMS=$'[-?\n@(#)$Id: '${PROGNAME}' version: '${VERSION}' $\n]'
 USAGE_PARAMS+=$'[-author?Walter G Davies <wgd@asccon.co>]'
-USAGE_PARAMS+=$'[-copyright?Copyright (c) 2025 Walter G Davies, A Stranger Chronicle]'
-USAGE_PARAMS+=$'[-license?3BSD]'
-USAGE_PARAMS+=$'[+NAME?asctbl --- Print ASCII Table of Character Values]'
-USAGE_PARAMS+=$'[+DESCRIPTION?The \basctbl\b program prints character value equivalents of the single-byte (extended) ASCII character set. This may be done on a per-character basis or as a table for a range of values.]'
+USAGE_PARAMS+=$'[-copyright?Copyright (c) 2025 Walter G Davies, A Stranger Chronicle <https://asccon.co>]'
+USAGE_PARAMS+=$'[-license?BSD-3-Clause (3BSD)]'
+USAGE_PARAMS+=$'[+NAME?'${PROGNAME}' --- Print ASCII Table of Character Values]'
+USAGE_PARAMS+=$'[+DESCRIPTION?The '${PROGNAME}' program prints character value equivalents of the single-byte (extended) ASCII character set. This may be done on a per-character basis or as a table for a range of values.]'
 USAGE_PARAMS+=$'[+USAGE?See the optional arguments, below, for printing specific output. With no arguments, prints a table of the printable 7-bit (default) ASCII range.]'
 USAGE_PARAMS+=$'[c:char?Specify a single character to print equivalent values of.]:[\a<char>\a]'
 USAGE_PARAMS+=$'[b:binary?Specify a binary number to print equivalent values of.]:[\a<01100001>\a]'
@@ -289,7 +291,8 @@ USAGE_PARAMS+=$'[D:no-decimal?Do not print the decimal value equivalent to the o
 USAGE_PARAMS+=$'[O:no-octal?Do not print the octal value equivalent to the output.]'
 USAGE_PARAMS+=$'[H:no-hex?Do not print the hexadecimal value equivalent to the output.]'
 USAGE_PARAMS+=$'[1:single-column?Print multi-value outputs all in a single column. This option is redundant with a single-character selection but not invalid.]'
-USAGE_PARAMS+=$'[+BUGS?This version is only somewhat terminal-aware. Future versions should handle variable-width columns (e.g turning columns on and off) better. An option to just print one entry per-line would not go amiss.]'
+USAGE_PARAMS+=$'[V:version?Print version information, along with some helpful hints, and exit.]'
+USAGE_PARAMS+=$'[+BUGS?This version is only somewhat terminal-aware. Future versions should handle variable-width columns (e.g turning columns on and off) better.]'
 USAGE_PARAMS+=$'[+?It would also be nice to have column headers and other such niceties (especially for single-column output).]'
 USAGE_PARAMS+=$'[+?There is currently no way to request a specific range of output (e.g: just print the set \a<a-z>\a).]'
 
@@ -312,6 +315,7 @@ while getopts -a ${PROGNAME} "${USAGE_PARAMS}" argc; do
         O) (( FLAG.noboct = ON )) ;;
         H) (( FLAG.nobhex = ON )) ;;
         1) (( FLAG.col    = ON )) ;;
+        V) (( FLAG.vers   = ON )) ;;
     esac
 done
 shift $(( --OPTIND ))
@@ -333,6 +337,12 @@ fi
 
 ## Process flags and run the requested functions.
 #
+if (( FLAG.vers == ON )); then
+    printf "%s v%s\n" ${PROGNAME} ${VERSION}
+    printf "For more info, try using '-?', '--help', or '--man'.\n"
+    exit 0
+fi
+
 integer charFlag=${OFF}
 if (( FLAG.char + FLAG.bin + FLAG.dec + FLAG.oct + FLAG.hex == ON )); then
     typeset flag
