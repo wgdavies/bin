@@ -39,11 +39,6 @@ integer OFF=0
 integer ON=1
 integer ERR=-1
 
-## Set terminal awareness for printing coluns.
-#
-integer mycols=$(tput cols) # terminal columns
-integer div=32              # column divisor
-
 ## Character range limit definitions.
 #
 integer LMIN=0   # lower limit char to print
@@ -67,6 +62,7 @@ compound FLAG=(
     integer nodec=${OFF}
     integer nooct=${OFF}
     integer nohex=${OFF}
+    integer col=${OFF}
 )
 
 ## Print debug statements for when you are way over-obsessing about a stupid
@@ -265,13 +261,15 @@ function printTable {
         fi
     done
 
-    printf "\n"
+    if (( FLAG.col == OFF )); then
+        printf "\n"
+    fi
 }
 
 ## getopts() parameters; there's a lot of extra stuff here used for online docs
 #
 typeset argc USAGE_PARAMS
-USAGE_PARAMS=$'[-?\n@(#)$Id: asctbl (Print ASCII Table) version: 1.0.0 $\n]'
+USAGE_PARAMS=$'[-?\n@(#)$Id: asctbl (Print ASCII Table) version: 1.1.0 $\n]'
 USAGE_PARAMS+=$'[-author?Walter G Davies <wgd@asccon.co>]'
 USAGE_PARAMS+=$'[-copyright?Copyright (c) 2025 Walter G Davies, A Stranger Chronicle]'
 USAGE_PARAMS+=$'[-license?3BSD]'
@@ -290,6 +288,7 @@ USAGE_PARAMS+=$'[B:no-binary?Do not print the binary value equivalent to the out
 USAGE_PARAMS+=$'[D:no-decimal?Do not print the decimal value equivalent to the output.]'
 USAGE_PARAMS+=$'[O:no-octal?Do not print the octal value equivalent to the output.]'
 USAGE_PARAMS+=$'[H:no-hex?Do not print the hexadecimal value equivalent to the output.]'
+USAGE_PARAMS+=$'[1:single-column?Print multi-value outputs all in a single column. This option is redundant with a single-character selection but not invalid.]'
 USAGE_PARAMS+=$'[+BUGS?This version is only somewhat terminal-aware. Future versions should handle variable-width columns (e.g turning columns on and off) better. An option to just print one entry per-line would not go amiss.]'
 USAGE_PARAMS+=$'[+?It would also be nice to have column headers and other such niceties (especially for single-column output).]'
 USAGE_PARAMS+=$'[+?There is currently no way to request a specific range of output (e.g: just print the set \a<a-z>\a).]'
@@ -312,14 +311,21 @@ while getopts -a ${PROGNAME} "${USAGE_PARAMS}" argc; do
         D) (( FLAG.nodec  = ON )) ;;
         O) (( FLAG.noboct = ON )) ;;
         H) (( FLAG.nobhex = ON )) ;;
+        1) (( FLAG.col    = ON )) ;;
     esac
 done
 shift $(( --OPTIND ))
 
-## For tablular output, try to format into a nice table depending on the
-#  number of terminal columns. Failing that, just print one per line.
+## Set terminal awareness for printing columns.
 #
-if (( mycols == 0 )); then
+integer mycols=$(tput cols) # terminal columns
+integer div=32              # column divisor
+
+## For tablular output, try to format into a nice table depending on the
+#  number of terminal columns. Failing that (or requested by user), just
+#  print one per line.
+#
+if (( mycols == 0 )) || (( FLAG.col == ${ON} )); then
     (( mycols = 1 ))
 else
     (( mycols = mycols / div ))
