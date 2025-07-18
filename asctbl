@@ -84,6 +84,7 @@ debug() {
 }
 
 ## Prints a formatted error message. Callers should `exit` as necessary.
+#  c.f: NOTE on printout() re: calling errors from sub-shells.
 #
 error() {
     print -u2 "${PROGNAME} error: $@"
@@ -211,7 +212,7 @@ function printout {
     typeset bin oct hex char
     typeset -a starr=()
 
-    if (( dec == -1 )); then
+    if (( dec == ERR )); then
         exit 1
     else
         bin=$(binout ${dec})
@@ -225,12 +226,13 @@ function printout {
         if (( dec == 42 )); then
             starr+=( \'*\' )
         else
-            starr+=( $(printf "'%s'" ${char}) ); fi
+            starr+=( $(printf "'%s'" ${char}) );
+        fi
     fi
-    if (( FLAG.nobin  == OFF )); then starr+=( $(printf "%s"   ${bin}) ); fi
-    if (( FLAG.nodec  == OFF )); then starr+=( $(printf "%d"   ${dec}) ); fi
-    if (( FLAG.nooct  == OFF )); then starr+=( $(printf "%s"   ${oct}) ); fi
-    if (( FLAG.nohex  == OFF )); then starr+=( $(printf "%02s" ${hex}) ); fi
+    if (( FLAG.nobin == OFF )); then starr+=( $(printf "%s"   ${bin}) ); fi
+    if (( FLAG.nodec == OFF )); then starr+=( $(printf "%d"   ${dec}) ); fi
+    if (( FLAG.nooct == OFF )); then starr+=( $(printf "%s"   ${oct}) ); fi
+    if (( FLAG.nohex == OFF )); then starr+=( $(printf "%02s" ${hex}) ); fi
 
     printf "%s " "${starr[@]}"
     if (( ret == ON )); then printf "\n"; fi
@@ -257,8 +259,6 @@ function printTable {
     for (( idx = llim ; idx < ulim ; idx++ )); do
         printout ${charFlag} ${idx}
         printf "\t"
-        #printf "0x%03d (%s): '%s'\t" ${idx} $(printbin ${idx}) $(printf "\x${idx}")
-        #printf "0x%03d: '%s'\t" ${idx} $(printf "\x${idx}")
 
         if (( (( idx % mycols )) == 0 )) || (( idx >= ulim )); then
             printf "\n"
@@ -270,8 +270,8 @@ function printTable {
 
 ## getopts() parameters; there's a lot of extra stuff here used for online docs
 #
-typeset argc
-typeset USAGE_PARAMS=$'[-?\n@(#)$Id: asctbl (Print ASCII Table) version: 1.0.0 $\n]'
+typeset argc USAGE_PARAMS
+USAGE_PARAMS=$'[-?\n@(#)$Id: asctbl (Print ASCII Table) version: 1.0.0 $\n]'
 USAGE_PARAMS+=$'[-author?Walter G Davies <wgd@asccon.co>]'
 USAGE_PARAMS+=$'[-copyright?Copyright (c) 2025 Walter G Davies, A Stranger Chronicle]'
 USAGE_PARAMS+=$'[-license?3BSD]'
@@ -290,9 +290,9 @@ USAGE_PARAMS+=$'[B:no-binary?Do not print the binary value equivalent to the out
 USAGE_PARAMS+=$'[D:no-decimal?Do not print the decimal value equivalent to the output.]'
 USAGE_PARAMS+=$'[O:no-octal?Do not print the octal value equivalent to the output.]'
 USAGE_PARAMS+=$'[H:no-hex?Do not print the hexadecimal value equivalent to the output.]'
-USAGE_PARAMS+=$'[+BUGS?This version is only somewhat terminal-aware. Future versions should handle variable-width columns (e.g turning columns on and off) better.]'
-USAGE_PARAMS+=$'[+?It would also be nice to have column headers and other such niceties.]'
-USAGE_PARAMS+=$'[+?There is currently no way to request a specific range of output (e.g just print the set \a<a-z>\a).]'
+USAGE_PARAMS+=$'[+BUGS?This version is only somewhat terminal-aware. Future versions should handle variable-width columns (e.g turning columns on and off) better. An option to just print one entry per-line would not go amiss.]'
+USAGE_PARAMS+=$'[+?It would also be nice to have column headers and other such niceties (especially for single-column output).]'
+USAGE_PARAMS+=$'[+?There is currently no way to request a specific range of output (e.g: just print the set \a<a-z>\a).]'
 
 ## Read the command line parameters and intialise option variables to their
 #  selected values.
