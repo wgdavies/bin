@@ -1,0 +1,347 @@
+#!/usr/bin/env ksh
+#
+# asctbl - Program to print out an ASCII table or get ASCII character values.
+#
+# Copyright 2025 by Walter G Davies <wgdavies@protonmail.com>
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+#
+# 1. Redistributions of source code must retain the above copyright
+# notice, this list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright
+# notice, this list of conditions and the following disclaimer in the
+# documentation and/or other materials provided with the distribution.
+#
+# 3. Neither the name of the copyright holder nor the names of its
+# contributors may be used to endorse or promote products derived from
+# this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+# “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+# A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+# HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+# SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
+# TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+# PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+# LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+# NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+## Default environment settings, logic, and error handling.
+#
+PATH=/bin:/usr/bin
+typeset -r PROGNAME="asctbl"
+integer OFF=0
+integer ON=1
+integer ERR=-1
+
+## Set terminal awareness for printing coluns.
+#
+integer mycols=$(tput cols) # terminal columns
+integer div=32              # column divisor
+
+## Character range limit definitions.
+#
+integer LMIN=0   # lower limit char to print
+integer PCHR=32  # lowest printable character value ("space")
+integer ECHR=128 # lowest extended ASCII value ("euro"(?!))
+integer UMAX=255 # limit char to 1-byte ASCII
+
+## Flags to notify that certain options are enabled
+#
+compound FLAG=(
+    integer char=${OFF}
+    integer bin=${OFF}
+    integer dec=${OFF}
+    integer oct=${OFF}
+    integer hex=${OFF}
+    integer inc=${OFF}
+    integer ext=${OFF}
+    integer header=${OFF}
+    integer nochar=${OFF}
+    integer nobin=${OFF}
+    integer nodec=${OFF}
+    integer nooct=${OFF}
+    integer nohex=${OFF}
+)
+
+## Print debug statements for when you are way over-obsessing about a stupid
+#  shell script.
+#
+#  Arguments:
+#    ${1}: calling function name (typically ${0})
+#    ${2}: message to print (e.g variable values, &c)
+#
+debug() {
+    typeset fname=${1}
+    typeset msg="${2}"
+
+    print -u2 -f "DEBUG ${fname}()> %s\n" "${msg}"
+}
+
+## Prints a formatted error message. Callers should `exit` as necessary.
+#
+error() {
+    print -u2 "${PROGNAME} error: $@"
+
+    exit 1
+}
+
+## Return the decimal equivalent of the binary string.
+#  The boring way to do this is:
+#      printf "obase=10; ibase=2; %s" ${1} | bc
+#
+function trbin {
+    typeset bin="${1}"
+    integer i=0 j=0 k=0 bit=0 num=0
+
+    if (( ${#bin} > 8 )); then
+        printf "%d" ${ERR}
+        error "binary values must be no more than 8 digits"
+    else
+        j=${#bin}
+        (( k = j ))
+    fi
+
+    for (( i = 0 ; i < k ; i++ )); do
+        (( j-- ))
+        bit="${bin:$i:1}"
+        num+=$(( bit * 2**j ))
+    done
+
+    printf "%d" ${num}
+}
+
+## Return the binary string equivalent of the decimal value.
+#
+function binout {
+    typeset bin=$(printf "obase=2; ibase=10; %d" ${1} | bc)
+    printf "%08d" ${bin}
+}
+
+## Return the decimal equivalent of a character value.
+#
+function trchar {
+    typeset char=${1}
+    typeset -a val=()
+
+    if (( ${#char} != 1 )); then
+        printf "%d" ${ERR}
+        error "must provide a single ASCII character"
+    else
+        val=( $(printf "%s" ${char} | od -d) )
+    fi
+
+    printf "%s" ${val[1]}
+}
+
+## Return the decimal equivalent of an octal character.
+#
+function troct {
+    integer oct=${1}
+
+    if (( oct > 377 )); then
+        printf "%d" ${ERR}
+        error "octal value must be less than '0377'"
+    else
+        printf "obase=10; ibase=8; %d" ${oct} | bc
+    fi
+}
+
+## Return the octal equivalent of the decimal value.
+#
+function octout {
+    typeset oct=$(printf "obase=8; ibase=10; %d" ${1} | bc)
+    printf "0%d" ${oct}
+}
+
+## Return the decimal input. :-P
+#
+function trdec {
+    integer dec=${1}
+
+    if (( dec >= LMIN )) && (( dec <= UMAX )); then
+        printf "%d" ${dec}
+    else
+        printf "%d" ${ERR}
+        error "decimal value must be between ${LMIN} and ${UMAX}"
+    fi
+}
+
+## Return the decimal equivalent of a hex value.
+#
+function trhex {
+    typeset -u hex=${1}
+
+    if (( ${#hex} <= 2 )); then
+        printf "obase=10; ibase=16; %s" ${hex} | bc
+    elif (( ${#hex} <= 4 )) && [[ ${hex:0:2} == "0X" ]]; then
+        hex=${hex:2:2}
+        printf "obase=10; ibase=16; %s" ${hex} | bc
+    else
+        printf "%d" ${ERR}
+        error "hex values must be between 0x00 and 0xff"
+    fi
+}
+
+## Return the hex equivalent of the decimal value.
+#
+function hexout {
+    typeset hex=$(printf "obase=16; ibase=10; %d" ${1} | bc)
+    printf "0x%s" ${hex}
+}
+
+## Print the character equivalents for the given decimal input, according
+#  to the requested output format.
+#
+#  NOTE: Because the "tr*()" functions, above, are run in a sub-shell, fatal
+#        errors will not actually terminate the program. To get the program
+#        to fail correctly, the "tr*()" functions must "return" the `ERR`
+#        global variable _before_ calling `error()`:
+#            `printf "%d" ${ERR}`
+#            `error ${0} "Something Happened..."`
+#
+function printout {
+    integer ret=${1}
+    integer dec=${2}
+    typeset bin oct hex char
+    typeset -a starr=()
+
+    if (( dec == -1 )); then
+        exit 1
+    else
+        bin=$(binout ${dec})
+        oct=$(octout ${dec})
+        hex=$(hexout ${dec})
+        char=$(printf "0x%x" ${dec} | xxd -r)
+    fi
+
+    if (( FLAG.nochar == OFF )); then
+        # special hack to not glob the current directory listing :D
+        if (( dec == 42 )); then
+            starr+=( \'*\' )
+        else
+            starr+=( $(printf "'%s'" ${char}) ); fi
+    fi
+    if (( FLAG.nobin  == OFF )); then starr+=( $(printf "%s"   ${bin}) ); fi
+    if (( FLAG.nodec  == OFF )); then starr+=( $(printf "%d"   ${dec}) ); fi
+    if (( FLAG.nooct  == OFF )); then starr+=( $(printf "%s"   ${oct}) ); fi
+    if (( FLAG.nohex  == OFF )); then starr+=( $(printf "%02s" ${hex}) ); fi
+
+    printf "%s " "${starr[@]}"
+    if (( ret == ON )); then printf "\n"; fi
+}
+
+## Iterate over the requested character set range and print the requested
+#  results.
+#
+function printTable {
+    integer llim=0 ulim=0 idx=0
+    debug ${0} "llim=${llim} ulim=${ulim} inc=${FLAG.inc} ext=${FLAG.ext}"
+    if (( FLAG.inc == ON )); then
+        (( llim = LMIN ))
+    else
+        (( llim = PCHR ))
+    fi
+
+    if (( FLAG.ext == ON )); then
+        (( ulim = UMAX ))
+    else
+        (( ulim = ECHR ))
+    fi
+    debug ${0} "llim=${llim} ulim=${ulim} inc=${FLAG.inc} ext=${FLAG.ext}"
+    for (( idx = llim ; idx < ulim ; idx++ )); do
+        printout ${charFlag} ${idx}
+        printf "\t"
+        #printf "0x%03d (%s): '%s'\t" ${idx} $(printbin ${idx}) $(printf "\x${idx}")
+        #printf "0x%03d: '%s'\t" ${idx} $(printf "\x${idx}")
+
+        if (( (( idx % mycols )) == 0 )) || (( idx >= ulim )); then
+            printf "\n"
+        fi
+    done
+
+    printf "\n"
+}
+
+## getopts() parameters; there's a lot of extra stuff here used for online docs
+#
+typeset argc
+typeset USAGE_PARAMS=$'[-?\n@(#)$Id: asctbl (Print ASCII Table) version: 1.0.0 $\n]'
+USAGE_PARAMS+=$'[-author?Walter G Davies <wgd@asccon.co>]'
+USAGE_PARAMS+=$'[-copyright?Copyright (c) 2025 Walter G Davies, A Stranger Chronicle]'
+USAGE_PARAMS+=$'[-license?3BSD]'
+USAGE_PARAMS+=$'[+NAME?asctbl --- Print ASCII Table of Character Values]'
+USAGE_PARAMS+=$'[+DESCRIPTION?The \basctbl\b program prints character value equivalents of the single-byte (extended) ASCII character set. This may be done on a per-character basis or as a table for a range of values.]'
+USAGE_PARAMS+=$'[+USAGE?See the optional arguments, below, for printing specific output. With no arguments, prints a table of the printable 7-bit (default) ASCII range.]'
+USAGE_PARAMS+=$'[c:char?Specify a single character to print equivalent values of.]:[\a<char>\a]'
+USAGE_PARAMS+=$'[b:binary?Specify a binary number to print equivalent values of.]:[\a<01100001>\a]'
+USAGE_PARAMS+=$'[d:decimal?Specify a decimal value to print equivalent values of.]:[\a<97>\a]'
+USAGE_PARAMS+=$'[o:octal?Specify a octal value to print equivalent values of.]:[\a<0141>\a]'
+USAGE_PARAMS+=$'[h:hex?Specify a hexidecimal value to print equivalent values of.]:[\a<0x61>\a]'
+USAGE_PARAMS+=$'[i:include?Include lower byte values so that control characters and other miscellany are also printed. These are excluded by default.]'
+USAGE_PARAMS+=$'[e:extended?Include upper byte values so that extended ASCII characters and other miscellany are also printed. These are excluded by default.]'
+USAGE_PARAMS+=$'[C:no-char?Do not print the ASCII character equivalent to the output.]'
+USAGE_PARAMS+=$'[B:no-binary?Do not print the binary value equivalent to the output.]'
+USAGE_PARAMS+=$'[D:no-decimal?Do not print the decimal value equivalent to the output.]'
+USAGE_PARAMS+=$'[O:no-octal?Do not print the octal value equivalent to the output.]'
+USAGE_PARAMS+=$'[H:no-hex?Do not print the hexadecimal value equivalent to the output.]'
+USAGE_PARAMS+=$'[+BUGS?This version is only somewhat terminal-aware. Future versions should handle variable-width columns (e.g turning columns on and off) better.]'
+USAGE_PARAMS+=$'[+?It would also be nice to have column headers and other such niceties.]'
+USAGE_PARAMS+=$'[+?There is currently no way to request a specific range of output (e.g just print the set \a<a-z>\a).]'
+
+## Read the command line parameters and intialise option variables to their
+#  selected values.
+#
+typeset inchar
+while getopts -a ${PROGNAME} "${USAGE_PARAMS}" argc; do
+    case ${argc} in
+        c) (( FLAG.char   = ON )); inchar=${OPTARG} ;;
+        b) (( FLAG.bin    = ON )); inchar=${OPTARG} ;;
+        d) (( FLAG.dec    = ON )); inchar=${OPTARG} ;;
+        o) (( FLAG.oct    = ON )); inchar=${OPTARG} ;;
+        h) (( FLAG.hex    = ON )); inchar=${OPTARG} ;;
+        i) (( FLAG.inc    = ON )) ;;
+        e) (( FLAG.ext    = ON )) ;;
+        C) (( FLAG.nochar = ON )) ;;
+        B) (( FLAG.nobin  = ON )) ;;
+        D) (( FLAG.nodec  = ON )) ;;
+        O) (( FLAG.noboct = ON )) ;;
+        H) (( FLAG.nobhex = ON )) ;;
+    esac
+done
+shift $(( --OPTIND ))
+
+## For tablular output, try to format into a nice table depending on the
+#  number of terminal columns. Failing that, just print one per line.
+#
+if (( mycols == 0 )); then
+    (( mycols = 1 ))
+else
+    (( mycols = mycols / div ))
+fi
+
+## Process flags and run the requested functions.
+#
+integer charFlag=${OFF}
+if (( FLAG.char + FLAG.bin + FLAG.dec + FLAG.oct + FLAG.hex == ON )); then
+    typeset flag
+
+    for flag in char bin dec oct hex; do
+        nameref ref=FLAG.${flag}
+
+        if (( ref == ON )); then
+            (( charFlag = ON ))
+            alias func=tr${flag}
+            printout ${charFlag} $(func ${inchar})
+        fi
+    done
+elif (( FLAG.char + FLAG.bin + FLAG.dec + FLAG.oct + FLAG.hex > ON )); then
+    error "must supply only one character type translation"
+else
+    printTable
+fi

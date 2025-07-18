@@ -1,0 +1,12 @@
+#!/bin/ksh93
+
+PATH=/usr/bin
+
+if [[ $(uname) != "Linux" ]]; then
+    print -u2 "ERROR: Must be run on a GNU/Linux kernel."
+    exit 1
+else
+    echo 3 | sudo tee /proc/sys/vm/drop_caches
+    print "Updated VM caches."
+fi
+
