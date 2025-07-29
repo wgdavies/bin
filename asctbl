@@ -57,12 +57,12 @@ compound FLAG=(
     integer hex=${OFF}
     integer inc=${OFF}
     integer ext=${OFF}
-    integer header=${OFF}
     integer nochar=${OFF}
     integer nobin=${OFF}
     integer nodec=${OFF}
     integer nooct=${OFF}
     integer nohex=${OFF}
+    integer header=${OFF}
     integer col=${OFF}
     integer vers=${OFF}
 )
@@ -221,6 +221,8 @@ function printout {
 
     if (( FLAG.nochar == OFF )); then
         # special hack to not glob the current directory listing :D
+        # ...BTW, `starr` stands for "string array", nothing to do with
+        # the asterisk! :D Ah, comedy gold, this stuff.
         if (( dec == 42 )); then
             starr+=( \'*\' )
         else
@@ -228,8 +230,8 @@ function printout {
         fi
     fi
     if (( FLAG.nobin == OFF )); then starr+=( $(printf "%s"   ${bin}) ); fi
-    if (( FLAG.nodec == OFF )); then starr+=( $(printf "%d"   ${dec}) ); fi
     if (( FLAG.nooct == OFF )); then starr+=( $(printf "%s"   ${oct}) ); fi
+    if (( FLAG.nodec == OFF )); then starr+=( $(printf "%d"   ${dec}) ); fi
     if (( FLAG.nohex == OFF )); then starr+=( $(printf "%02s" ${hex}) ); fi
 
     printf "%s " "${starr[@]}"
@@ -241,7 +243,7 @@ function printout {
 #
 function printTable {
     integer llim=0 ulim=0 idx=0
-    debug ${0} "llim=${llim} ulim=${ulim} inc=${FLAG.inc} ext=${FLAG.ext}"
+    #debug ${0} "llim=${llim} ulim=${ulim} inc=${FLAG.inc} ext=${FLAG.ext}"
     if (( FLAG.inc == ON )); then
         (( llim = LMIN ))
     else
@@ -253,7 +255,7 @@ function printTable {
     else
         (( ulim = ECHR ))
     fi
-    debug ${0} "llim=${llim} ulim=${ulim} inc=${FLAG.inc} ext=${FLAG.ext}"
+    #debug ${0} "llim=${llim} ulim=${ulim} inc=${FLAG.inc} ext=${FLAG.ext}"
     for (( idx = llim ; idx < ulim ; idx++ )); do
         printout ${charFlag} ${idx}
         printf "\t"
@@ -291,9 +293,10 @@ USAGE_PARAMS+=$'[D:no-decimal?Do not print the decimal value equivalent to the o
 USAGE_PARAMS+=$'[O:no-octal?Do not print the octal value equivalent to the output.]'
 USAGE_PARAMS+=$'[H:no-hex?Do not print the hexadecimal value equivalent to the output.]'
 USAGE_PARAMS+=$'[1:single-column?Print multi-value outputs all in a single column. This option is redundant with a single-character selection but not invalid.]'
+USAGE_PARAMS+=$'[t:header?Print a title/header row above columnar output. This option implies single-column mode.]'
 USAGE_PARAMS+=$'[V:version?Print version information, along with some helpful hints, and exit.]'
 USAGE_PARAMS+=$'[+BUGS?This version is only somewhat terminal-aware. Future versions should handle variable-width columns (e.g turning columns on and off) better.]'
-USAGE_PARAMS+=$'[+?It would also be nice to have column headers and other such niceties (especially for single-column output).]'
+USAGE_PARAMS+=$'[+?Now that we have a header option, add it to the terminal awareness so we can have multi-column output with headers-per-column.]'
 USAGE_PARAMS+=$'[+?There is currently no way to request a specific range of output (e.g: just print the set \a<a-z>\a).]'
 
 ## Read the command line parameters and intialise option variables to their
@@ -312,8 +315,9 @@ while getopts -a ${PROGNAME} "${USAGE_PARAMS}" argc; do
         C) (( FLAG.nochar = ON )) ;;
         B) (( FLAG.nobin  = ON )) ;;
         D) (( FLAG.nodec  = ON )) ;;
-        O) (( FLAG.noboct = ON )) ;;
-        H) (( FLAG.nobhex = ON )) ;;
+        O) (( FLAG.nooct  = ON )) ;;
+        H) (( FLAG.nohex  = ON )) ;;
+        t) (( FLAG.header = ON )) ;;
         1) (( FLAG.col    = ON )) ;;
         V) (( FLAG.vers   = ON )) ;;
     esac
@@ -329,6 +333,23 @@ integer div=32              # column divisor
 #  number of terminal columns. Failing that (or requested by user), just
 #  print one per line.
 #
+if (( FLAG.header == ON )); then
+    (( FLAG.col = ON ))
+    integer l=0
+    typeset -a c=( ' Char ' '======' )
+    typeset -a b=( ' Binary ' '========' )
+    typeset -a o=( ' Oct ' '=====' )
+    typeset -a d=( ' Dec ' '=====' )
+    typeset -a h=( ' Hex ' '=====' )
+
+    for ln in 0 1; do
+        print "${c[$l]}  ${b[0$l]}  ${o[$l]}  ${d[$l]}  ${h[$l]}"
+    done
+    exit 2
+# " Char    Binary    Oct    Dec    Hex "
+# "======  ========  =====  =====  ====="
+fi
+
 if (( mycols == 0 )) || (( FLAG.col == ${ON} )); then
     (( mycols = 1 ))
 else
