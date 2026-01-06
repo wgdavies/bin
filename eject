@@ -1,0 +1,28 @@
+#!/usr/bin/env ksh
+
+PATH=/bin:/usr/bin:/usr/sbin
+
+typeset -a VOLS=( $(ls /Volumes | grep -vi ${HOSTNAME}) )
+typeset -a ARGS=( ${@} )
+
+if (( ${#ARGS[@]} > 0 )); then
+	for arg in ${ARGS[@]}; do
+		if [[ ${VOLS[@]} =~ ${arg} ]]; then
+			diskutil eject ${arg}
+		else
+			print -u2 "ERROR: ${arg} is not mounted"
+			exit 1
+		fi
+	done
+else
+	if (( ${#VOLS[@]} == 1 )); then
+		diskutil eject ${VOLS[@]}
+	elif (( ${#VOLS[@]} > 1 )); then
+		print -u2 "ERROR: unimplemented function"
+		exit 2
+	else
+		print "eject: Nothing to eject!"
+		exit 0
+	fi
+fi
+
