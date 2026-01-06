@@ -1,0 +1,101 @@
+#!/usr/bin/env ksh
+
+typeset HF="./HOURS.md"   # The "hours" Markdown file.
+typeset -F2 HR=150.00     # Standard hourly rate.
+typeset -F2 DR=50.00      # Discounted hourly rate.
+typeset -i OY=2024        # Oldest Year we'll recognise.
+typeset PF="./.hours.pref" # Local preferences file.
+typeset -F2 bill          # Standard billable hours count.
+typeset -F2 disc          # Discounted billable hours count.
+typeset -F2 comp          # Complementary hours count.
+typeset -F2 totl          # Total of all project hours.
+typeset -a dr=( ${@} )    # Optional "YYYY MM" date range (e.g print only hours for YYYY MM).
+typeset -a b=()           # Array of standard billable hours.
+typeset -a c=()           # Array of complementary hours.
+typeset -a d=()           # Array of discounted hours.
+typeset -a t=()           # Array of all project hours.
+
+if [[ -r ${PF} ]]; then
+	source ${PF}
+fi
+
+if [[ ! -r ${HF} ]]; then
+	print -u2 "ERROR: unable to read ${HF} file"
+	exit 1
+fi
+
+printman() {
+	cat <<EOF
+
+The gethours program reads a local file (./HOURS.md by default) to count up
+project hours. The HOURS.md file must have the following format:
+v----------------------------------------------------------------------------v
+| YYYY-MM-DD:                                                                |
+|  * HHMM - HHMM [ , ... ]                                                   |
+|    + X hours                                                               |
+|      - Description of standard billable hours work.                        |
+|      - ...                                                                 |
+|                                                                            |
+| YYYY-MM-DD:                                                                |
+|  * HHMM - HHMM [ , ... ]                                                   |
+|    + Y hours comp                                                          |
+|      - Description of complementary (non-billable) hours.                  |
+|                                                                            |
+| YYYY-MM-DD:                                                                |
+|  * HHMM - HHMM [ , ... ]                                                   |
+|    + Z hours disc                                                          |
+|      - Description of discounted billable hours.                           |
+^----------------------------------------------------------------------------^
+
+In addition, a "./.hours.pref" local file may be defined to over-ride default
+values, e.g:
+v----------------------------------------------------------------------------v
+| HF=OtherHours.md # Alternative hours file.                                 |
+| HR=12345.00      # Much higher hourly rate.                                |
+| DR=4.75          # 1980s minimum wage.                                     |
+| OY=1979          # ...because.                                             |
+^----------------------------------------------------------------------------^
+
+EOF
+}
+
+if (( ${#dr[@]} == 0 )); then
+	b=( $(egrep '^   \+ [[:digit:]].* hour' ${HF} | egrep -v '(comp|disc)' | tr -d '[:alpha:]') )
+	c=( $(egrep '^   \+ [[:digit:]].* hou.* comp' ${HF} | tr -d '[:alpha:]') )
+	d=( $(egrep '^   \+ [[:digit:]].* hou.* disc' ${HF} | tr -d '[:alpha:]') )
+	t=( $(egrep '^   \+ [[:digit:]].* hour' ${HF} | tr -d '[:alpha:]') )
+elif (( ${#dr[@]} == 2 )) && (( ${dr[0]} > OY )) && (( ${dr[1]} > 0 )) && (( ${dr[1]} <= 12 )); then
+	b=( $(egrep -A2 "^${dr[0]}-${dr[1]}-" ${HF} | \
+		egrep '^   \+ [[:digit:]].* hour' | egrep -v '(comp|disc)' | tr -d '[:alpha:]') )
+	c=( $(egrep -A2 "^${dr[0]}-${dr[1]}-" ${HF} | \
+		egrep '^   \+ [[:digit:]].* hou.* comp' | tr -d '[:alpha:]') )
+	d=( $(egrep -A2 "^${dr[0]}-${dr[1]}-" ${HF} | \
+		egrep '^   \+ [[:digit:]].* hou.* disc' | tr -d '[:alpha:]') )
+	t=( $(egrep -A2 "^${dr[0]}-${dr[1]}-" ${HF} | \
+		egrep '^   \+ [[:digit:]].* hour' | tr -d '[:alpha:]') )
+elif [[ ${dr[@]} =~ "man" ]] || [[ ${dr[@]} =~ "help" ]]; then
+	printman
+	exit 0
+else
+	print -u2 "USAGE: gethours.sh <YYYY MM>"
+	exit 1
+fi
+
+bill=$( print $(( 0 ${b[@]} )) )
+comp=$( print $(( 0 ${c[@]} )) )
+disc=$( print $(( 0 ${d[@]} )) )
+totl=$( print $(( 0 ${t[@]} )) )
+typeset -F2 ck=$(( bill + comp + disc ))
+
+if (( ck != totl )); then
+	print -u2 "ERROR: counted hours (${ck}) not equal to total hours (${totl})"
+else
+	printf "Total billable hours: %.2f\n" ${bill}
+	printf "\t\$%s/hr: \$%.2f\n" ${HR} $(( HR * bill ))
+	printf "Total comped hours: %.2f\n" ${comp}
+	printf "Total discount hours: %.2f\n" ${disc}
+	printf "\t\$%s/hr: \$%.2f\n" ${DR} $(( DR * disc ))
+	printf "Total project hours: %.2f\n" ${totl}
+	printf "\t\$%s/hr: \$%.2f\n" ${HR} $(( HR * totl ))
+fi
+
