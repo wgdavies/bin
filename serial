@@ -6,7 +6,7 @@ PATH=/usr/bin
 
 typeset LOG=""
 typeset PORT="/dev/tty.usbserial-0001"
-typeset -i RATE=115200
+typeset -i BRATE=115200
 
 if [[ $(uname -o) != "Darwin" ]]; then
 	print -u2 "ERROR: This programs only runs on macos."
@@ -14,19 +14,19 @@ if [[ $(uname -o) != "Darwin" ]]; then
 fi
 
 case x${1} in
-	"-h"|"--help")
+	"-l")
+		LOG="-L"
+	;;
+	*) # "-h"|"--help") # TODO: Add proper CLI argument handling.
 		print "usage: serial <-l>"
 		print "       Shortcut for screen command."
 		print "  -l   Enable output logging."
 		exit 0
 	;;
-	"-l")
-		LOG="-L"
-	;;
 esac
 
 if [[ -c ${PORT} ]]; then
-	screen -A ${LOG} ${PORT} ${RATE}
+	screen -A ${LOG} ${PORT} ${BRATE}
 else
 	print -u2 "ERROR: Unable to communicate with USB serial port."
 	exit 1
