@@ -5,8 +5,12 @@
 PATH=/usr/bin
 
 typeset LOG=""
-typeset PORT="/dev/tty.usbserial-0001"
+typeset -a PORT=( $(print /dev/*usb*) )
 typeset -i BRATE=115200
+#typeset CARGS="cs7,-parenb,-parodd,-cstopb"
+#typeset CARGS="cs8,ixon,ixoff"
+typeset CARGS=""
+typeset -i portnum=0
 
 if [[ $(uname -o) != "Darwin" ]]; then
 	print -u2 "ERROR: This programs only runs on macos."
@@ -17,7 +21,7 @@ case x${1} in
 	"-l")
 		LOG="-L"
 	;;
-	*) # "-h"|"--help") # TODO: Add proper CLI argument handling.
+	"-h"|"--help") # TODO: Add proper CLI argument handling.
 		print "usage: serial <-l>"
 		print "       Shortcut for screen command."
 		print "  -l   Enable output logging."
@@ -25,8 +29,20 @@ case x${1} in
 	;;
 esac
 
-if [[ -c ${PORT} ]]; then
-	screen -A ${LOG} ${PORT} ${BRATE}
+if (( ${#PORT[@]} > 1 )); then
+	for (( i = 0 ; i < ${#PORT[@]} ; ++i )); do
+		printf "%d: %s\n" ${i} ${PORT[$i]}
+	done
+
+	printf "Please select the serial port to use: "
+	read portnum
+elif (( ${#PORT[@]} < 1 )); then
+	print -u2 "ERROR: No serial ports found."
+	exit 1
+fi
+
+if [[ -c ${PORT[$portnum]} ]]; then
+	screen -A ${LOG} ${PORT[$portnum]} ${BRATE},${CARGS}
 else
 	print -u2 "ERROR: Unable to communicate with USB serial port."
 	exit 1
