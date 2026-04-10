@@ -1,5 +1,16 @@
 #!/bin/ksh
 
+# TODO: Add argument processing.
+#  -p, --print       Print generated password to STDOUT rather than to pasteboard.
+#  -l, --limit       Limit special characters in generated password.
+#  -n, --no-special  Limit character set merely to ASCII alphanums.
+#  -A, --alpha       Use only alpha characters in generated passwords.
+#  -N, --numeric     Use only numeric characters in generated passwords.
+#  -l, --length      Specify the length of the generated password (default: 8).
+#  -r, --repeatable  Allow characters to be repeated.
+# TODO: Remove `target` argument (replaced with -r option).
+# TODO: Ensure pbcopy executable available.
+
 typeset -i target=${1:-8}
 typeset -i it=0
 typeset -i count=0
