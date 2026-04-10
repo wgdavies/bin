@@ -1,0 +1,12 @@
+#!/usr/bin/env ksh
+
+PATH=/usr/bin
+
+if (( $(id -u) != 0 )); then
+	print -u2 "error: must run ${0} with root permissions"
+	exit 1
+else
+	dscacheutil -flushcache
+	killall -HUP mDNSResponder
+fi
+
