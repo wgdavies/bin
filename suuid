@@ -1,0 +1,72 @@
+#!/usr/bin/env ksh
+#
+# Short UUID string. Takes a UUID string (with or without dashes) as argument
+# and produces a 6-digit short UUID string based on the first three and last 
+# three digits. An optional argument may be specified before the UUID string
+# to specify the number of digits from each end.
+#
+# Enhancement: With only the UUID, produce an Elastic Connection Alis string.
+
+typeset PROGNAME="suuid"
+typeset -a ARGS=( ${@} )
+typeset -i size=3
+typeset -i stop=0
+typeset -i e=0
+typeset uuid=""
+
+function usage {
+    printf "usage: %s [ OPTION ] <UUID string>\n" ${PROGNAME}
+    printf "       Where OPTION is a digit from 1 to 8, inclusive, and the\n"
+    printf "       UUID string is a 36 or 32-character UUID string (with\n"
+    printf "       or without hyphen separators).\n"
+    printf "\nEXAMPLES\n"
+    printf "   %s 25f177f369fa48a7afbe68ddb88eb81d\n" ${PROGNAME}
+    printf "   %s -3 25f177f369fa48a7afbe68ddb88eb81d\n" ${PROGNAME}
+    printf "   %s -3 25f177f3-69fa-48a7-afbe-68ddb88eb81d\n" ${PROGNAME}
+    printf "       all produce the same output: 25181d\n"
+}
+
+if (( ${#ARGS[@]} > 2 )) || (( ${#ARGS[@]} < 1 )); then
+    usage
+    exit 1
+elif (( ${#ARGS[@]} == 2 )); then
+    uuid=${ARGS[1]}
+    size=${ARGS[0]}
+
+    if (( size < 1 )); then
+        size=$(( -size ))
+    fi
+
+    if (( size == 0 )) || (( size > 8 )); then
+        usage
+        exit 1
+    fi
+else
+    uuid=${ARGS[0]}
+    e=1
+fi
+
+if (( ${#uuid} == 32 )) || (( ${#uuid} == 36 )); then
+    stop=$(( ${#uuid} - size ))
+else
+    print -u2 "ERROR: ${uuid} does not appear to be a valid UUID string."
+    usage
+    exit 1
+fi
+
+if (( e == 0 )); then
+    if [[ -p /dev/stdout ]]; then
+        printf "%s%s\n" ${uuid:0:$size} ${uuid:$stop:$size}
+    else
+        printf "%s%s" ${uuid:0:$size} ${uuid:$stop:$size}
+    fi
+else
+    suuid="${uuid:0:$size}${uuid:$stop:$size}"
+
+    if [[ -p /dev/stdout ]]; then
+        printf "e%s\n" ${suuid:1:5}
+    else
+        printf "e%s" ${suuid:1:5}
+    fi
+fi
+
