@@ -1,0 +1,17 @@
+#!/usr/bin/env ksh
+
+PATH=/usr/bin:/opt/homebrew/bin
+
+typeset NET="${1}"
+
+if (( $(id -u) != 0 )); then
+	print -u2 "ERROR: must be run with root permissions"
+fi
+
+case x${NET} in
+	x1*) nmap -PR ${NET} -sn ;;
+	*)
+		print -u2 "usage: getmacs [Network/Range]"
+		print -u2 "       e.g 192.168.1.0/24"
+		;;
+esac
