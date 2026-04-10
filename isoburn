@@ -1,68 +1,226 @@
-#!/bin/ksh
+#!/usr/bin/env ksh
 
 PATH=/bin:/usr/bin:/sbin:/usr/sbin
 
-typeset progname="isoburn"
-typeset iso="${1}"
-typeset slc="${2}"
+## Top-level variable declarations and definitions.
+#
+typeset PROGNAME="isoburn"
 typeset -i idx=0
-typeset -a DLIST=( $(diskutil list -plist external                 \
-			| grep -A1 -B1 DeviceIdentifier                        \
-			| egrep -B2 'disk[[:digit:]]s[[:digit:]]'              \
-			| egrep -v 'key>|^--$'                                 \
-			| sed -e 's/^[[:space:]]*<string>//g;s/<\/string>//g') )
+typeset -i TB=0
+typeset -i TE=0
+typeset -a DLIST=()
+typeset IMG=""
+typeset DEV=""
 
+## Diagnostics and debugging; set DEBUG=${OFF} for production
+#
+typeset -i ERR=0
+typeset -ir OFF=0
+typeset -ir ON=1
+
+## Flags to notify that certain options are enabled.
+#
+compound FLAG=(
+    typeset -i help=OFF
+    typeset -i list=OFF
+    typeset -i over=OFF
+    typeset -i time=OFF
+    typeset -i slnt=OFF
+    typeset -i dev=OFF
+    typeset -i img=OFF
+)
+
+## Set up argument parameters and documentation.
+#
+typeset argc
+typeset USAGE_PARAMS=$'[-?\n@(#)$Id: isoburn version: 1.0.0 $\n]'
+USAGE_PARAMS+=$'[-author?Walter G Davies <wgd@asccon.co>]'
+USAGE_PARAMS+=$'[-copyright?Copyright (c) 2024 Walter G Davies]'
+USAGE_PARAMS+=$'[-license?3BSD]'
+USAGE_PARAMS+=$'[+NAME?isoburn --- write images to disk/USB]'
+USAGE_PARAMS+=$'[+DESCRIPTION?The \bisoburn\b utility is a convenience script for writing ISO (or whatever) disk images or filesystem slices to removeable/recordable media. It is, basically, a front-end interface for the ancient \vdd(1)\v utility.]'
+USAGE_PARAMS+=$'[+USAGE?The \bisoburn\b utility can list available devices (currently limited to USB drives) with no special permissions. Writing to a device typically requires root pemissions to the \vdiskutil(8)\v system and, of course, write pemissions to the specified device.]'
+USAGE_PARAMS+=$'[l:list?List available devices for writing. This is currently limited to USB devices such as "thumb drives".]'
+USAGE_PARAMS+=$'[o:overwrite?Do not attempt to unmount the specified device or reformat it. This option is required if the device should not be formatted by the system (e.g writing an ISO or other pre-defined filesystem) image to the device.]'
+USAGE_PARAMS+=$'[d:device?Specify the device to write to. Use the \v-l, --list\v option to view known devices or specify a full device path.]:[\adevice\a]'
+USAGE_PARAMS+=$'[i:image?Specify the image or data file to write to the device.]:[\a/path/to/image\a]'
+USAGE_PARAMS+=$'[t:time?Time the write operation and include that in reported output.]'
+USAGE_PARAMS+=$'[q:quiet?Runs without printing output; successful exit on 0, error on non-zero.]'
+USAGE_PARAMS+=$'[h:help?Print a summary of usage.]'
+
+## Help/usage message.
+#
 function usage {
-	printf "usage: %s [ list ] | [ [ ISO image ] [ disk slice ] ]\n" ${progname}
-	printf "  e.g: %s ~/Downloads/TotallyLegal.iso disk4s1\n" ${progname}
-	printf " NOTE: %s requires root permissions to run.\n" ${progname}
+    printf "usage: %s [ OPTIONS ] | [ -h, --help, --man ]\n" ${PROGNAME}
+    printf "    Where OPTIONS include:\n"
+    printf "    -l, --list\n"
+    printf "\tList available ('known') devices that can be written to.\n"
+    printf "\tNOTE: This option is exclusive of the following options and is\n"
+    printf "\tthe only one not typically requiring root permissions.\n"
+    printf "    -i, --image ~/Downloads/TotallyLegal.iso\n"
+    printf "\tSpecify the path to the file to be written.\n"
+    printf "    -d, --device [ dev | /path/to/dev ]<slice>\n"
+    printf "\tSpecify the device to write to. This may be either a 'known' device\n"
+    printf "\t(as listed in the output of the list option) or a path to another\n"
+    printf "\tdevice. An optional disk slice may be directly appended (e.g 'disk4'\n"
+    printf "\tto overwrites the whole device, 'disk4s1' only overwrites the first\n"
+    printf "\tslice of the device). See also the -o, --overwrite option.\n"
+    printf "    -o, --overwrite\n"
+    printf "\tIf not specified, %s attempts to first unmount the given\n" ${PROGNAME}
+    printf "\tdevice. This option should typically be used when writing an image\n"
+    printf "\tover a whole whole device.\n"
+    printf "    -t, --time\n"
+    printf "\tTimes the write operation and includes it in the output.\n"
+    printf "    -q, --quiet\n"
+    printf "\tQuiet output. Program exit status (e.g zero or non-zero) implies\n"
+    printf "\tprogram success or failure, correspondingly.\n"
+    printf "\tNOTE: Writing to a device requires root permissions.\n"
 }
 
-if (( ${#@} == 0 )) || [[ ${iso} =~ "-h" ]] || [[ ${iso} =~ "help" ]]; then
-	usage
-	exit 0
-elif (( $(id -u) != 0 )); then
-	usage
-	print "ERROR: must be run with root permissions"
-	exit 1
-elif [[ ${iso} == list ]]; then
-	if (( ${#DLIST[@]} == 0 )); then
-		print "ERROR: no USB devices detected"
-		exit 1
-	elif (( ! ${#DLIST[@]} % 2 )); then
-		print "ERROR: mismatched disk slice list"
-		exit 1
-	else
-		for (( idx = 0 ; idx < ${#DLIST[@]} ; ++idx )); do
-			(( idx % 2 )) && printf "%s : %s\n" ${DLIST[$idx]} ${DLIST[$idx-1]}
-		done
-	fi
-else
-	if [[ -f ${iso} ]] && [[ -b /dev/${slc} ]]; then
-		printf "Unmounting the selected USB device... "
-		diskutil unmount /dev/${slc} > /dev/null 2>&1
-		if (( $? != 0 )); then
-			printf "\n"
-			print "ERROR: USB device not mounted properly"
-			exit 1
-		else
-			printf "done.\n"
-		fi
+## Report errors and warnings, optionally exiting with status.
+#  Arguments:
+#    ${1}: <int> Status; prints warning on zero or exits with <int> on non-zero.
+#    ${2}: <str> Message string.
+#
+function error {
+    typeset -i val=${1}
+    typeset msg="${2}"
 
-		printf "Burning %s to %s... " ${iso} ${slc}
+    if (( val == 0 )); then
+        printf "WARNING: %s\n" "${msg}"
+    else
+        printf "ERROR: %s\n" "${msg}"
+        exit ${val}
+    fi
+}
 
-		typeset -a dout=( $(dd if=${iso} of=/dev/r${slc} bs=1m 2>&1) )
+## Exit program when root permissions are required but not supplied.
+#
+function rootck {
+    if (( $(id -u) != 0 )); then
+        usage
+        error 1 "must be run with root permissions"
+    fi
+}
 
-		if (( $? == 0 )); then
-			printf "completed %dMB ISO copy to USB.\n" $(( ${dout[0]} / 1024 / 1024 ))
-			printf "Please remove the selected USB device.\n"
-		else
-			printf "\n"
-			print "ERROR: ISO not created successfully on USB"
-		fi
-	else
-		print "ERROR: unable to find ISO ${iso} or destination /dev/${slc}"
-		exit 1
-	fi
+## Create the list of available devices.
+#
+function dlist {
+    DLIST=( $(diskutil list -plist external                  \
+                  | grep -A1 -B1 DeviceIdentifier            \
+                  | egrep -B2 'disk' | egrep -v 'key>|^--$'  \
+                  | sed -e 's/^[[:space:]]*<string>//g;s/<\/string>//g;s/Microsoft Basic Data/Data/g')
+          )
+}
+
+## Prints a string in H:M:S format of the time differential between TB and TE.
+#  Pinafore
+function gettime {
+    integer tb=${1}
+    integer te=${2}
+    integer td=(( te - tb ))
+    typeset ts=""
+
+    if (( td > 3600 )); then
+        ts=$(( td / 3600 ))
+        ts="${ts}:"$(( td))
+    fi
+
+    print "UNIMPLEMENTED"
+}
+
+## Read the command line parameters and intialise option variables to their
+#  selected values.
+#
+while getopts -a ${PROGNAME} "${USAGE_PARAMS}" argc; do
+    case ${argc} in
+        h) (( FLAG.help = ON )) ;;
+        l) (( FLAG.list = ON )) ;;
+        o) (( FLAG.over = ON )) ;;
+        q) (( FLAG.slnt = ON )) ;;
+        t) (( FLAG.time = ON ))  ; TB=$(printf '%(%s)T' now) ;;
+        i) (( FLAG.img  = ON ))  ; IMG="${OPTARG}" ;;
+        d) (( FLAG.dev  = ON ))
+           DEV="${OPTARG}"
+
+           if [[ ${DEV:0:1} != "/" ]] && [[ ${DEV:0:1} != "." ]]; then
+               DEV="/dev/${DEV}"
+           fi
+           ;;
+    esac
+done
+shift $(( --OPTIND ))
+
+## Run help and exit if requested.
+#
+if (( FLAG.help == ON )); then
+    usage
+    exit 0
 fi
 
+if (( FLAG.list == ON )); then
+    dlist
+
+    if (( ${#DLIST[@]} == 0 )); then
+        error 1 "no USB devices detected"
+    elif (( ! ${#DLIST[@]} % 2 )); then
+        error 1 "mismatched disk slice list"
+    else
+        for (( idx = 0 ; idx < ${#DLIST[@]} ; ++idx )); do
+            (( idx % 2 )) && printf "%s : %s\n" ${DLIST[$idx]} ${DLIST[$idx-1]}
+        done
+    fi
+else
+    if (( FLAG.dev == ON )); then
+        rootck
+
+        if [[ ! -w ${DEV} ]]; then
+            (( ++ERR ))
+            error 0 "unable to write to device file: ${DEV}"
+        fi
+    fi
+
+    if (( FLAG.img == ON )); then
+        if [[ ! -r ${IMG} ]]; then
+            (( ++ERR ))
+            error 0 "unable to read image file ${IMG}"
+        fi
+    fi
+
+    if (( ERR > 0 )); then
+        error ${ERR} "unable to write ${IMG} to ${DEV}"
+    else
+        if (( FLAG.over == OFF )); then
+            printf "Unmounting the selected USB device... "
+            diskutil unmount ${DEV} > /dev/null 2>&1
+
+            if (( $? != 0 )); then
+                printf "\n"
+                error 1 "device not mounted properly"
+            else
+                printf "done.\n"
+            fi
+        fi
+
+        printf "Burning %s to %s... " "${IMG}" "${DEV}"
+
+        typeset -a dout=( $(dd if=${IMG} of=${DEV} bs=1m 2>&1) )
+        (( ERR = $? ))
+
+        if (( ERR == 0 )); then
+            printf "completed %dMB image copy to %s" \
+                   $(( ${dout[0]} / 1024 / 1024 )) "${DEV}"
+            if (( FLAG.time == ON )); then
+                TE=$(printf '%(%s)T' now)
+                printf " in %s." $(gettime ${TB} ${TE})
+            else
+                printf ".\n"
+            fi
+
+            printf "Please remove the selected device: %s\n" "${DEV}"
+        else
+            printf "\n"
+            error ${ERR} "image file ${IMG} not written to device ${DEV}"
+        fi
+    fi
+fi
