@@ -19,11 +19,11 @@ function usage {
     printf "       Where OPTION is a digit from 1 to 8, inclusive, and the\n"
     printf "       UUID string is a 36 or 32-character UUID string (with\n"
     printf "       or without hyphen separators).\n"
-    printf "\nEXAMPLES\n"
+    printf "\n%sEXAMPLES%s:\n" "$(/usr/bin/tput bold)" "$(/usr/bin/tput sgr0)"
     printf "   %s 25f177f369fa48a7afbe68ddb88eb81d\n" ${PROGNAME}
     printf "   %s -3 25f177f369fa48a7afbe68ddb88eb81d\n" ${PROGNAME}
-    printf "   %s -3 25f177f3-69fa-48a7-afbe-68ddb88eb81d\n" ${PROGNAME}
-    printf "       all produce the same output: 25181d\n"
+    printf "   %s 3 25f177f3-69fa-48a7-afbe-68ddb88eb81d\n" ${PROGNAME}
+    printf "       ...all produce the same output: 25181d\n"
 }
 
 if (( ${#ARGS[@]} > 2 )) || (( ${#ARGS[@]} < 1 )); then
@@ -55,7 +55,7 @@ else
 fi
 
 if (( e == 0 )); then
-    if [[ -p /dev/stdout ]]; then
+    if [[ -t 1 ]]; then
         printf "%s%s\n" ${uuid:0:$size} ${uuid:$stop:$size}
     else
         printf "%s%s" ${uuid:0:$size} ${uuid:$stop:$size}
@@ -63,7 +63,7 @@ if (( e == 0 )); then
 else
     suuid="${uuid:0:$size}${uuid:$stop:$size}"
 
-    if [[ -p /dev/stdout ]]; then
+    if [[ -t 1 ]]; then
         printf "e%s\n" ${suuid:1:5}
     else
         printf "e%s" ${suuid:1:5}
