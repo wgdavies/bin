@@ -1,0 +1,9 @@
+#!/usr/bin/env ksh
+
+if [ -n ${1} ]; then
+	print "usage: pbclear"
+	print "       Clears the multi-line pastebuffer to not copy/paste garbage to the terminal."
+else
+	$';printf \'\\e[?2004l\';'
+fi
+
